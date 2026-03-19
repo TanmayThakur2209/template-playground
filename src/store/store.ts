@@ -55,6 +55,7 @@ interface AppState {
   setEditorsVisible: (value: boolean) => void;
   setPreviewVisible: (value: boolean) => void;
   setProblemPanelVisible: (value: boolean) => void;
+  toggleProblemPanel: () => void;
   startTour: () => void;
   isModelCollapsed: boolean;
   isTemplateCollapsed: boolean;
@@ -207,6 +208,7 @@ const useAppStore = create<AppState>()(
         toggleModelCollapse: () => set((state) => ({ isModelCollapsed: !state.isModelCollapsed })),
         toggleTemplateCollapse: () => set((state) => ({ isTemplateCollapsed: !state.isTemplateCollapsed })),
         toggleDataCollapse: () => set((state) => ({ isDataCollapsed: !state.isDataCollapsed })),
+        toggleProblemPanel: () => set((state) => ({ isProblemPanelVisible: !state.isProblemPanelVisible })),
         setShowLineNumbers: (value: boolean) => {
           if (typeof window !== 'undefined') {
             localStorage.setItem('showLineNumbers', String(value));
