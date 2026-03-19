@@ -14,6 +14,7 @@ import html2pdf from "html2pdf.js";
 import { Button } from "antd";
 import * as monaco from "monaco-editor";
 import { MdFormatAlignLeft, MdChevronRight, MdExpandMore } from "react-icons/md";
+import Editor from "@monaco-editor/react";
 
 const MainContainer = () => {
   const agreementHtml = useAppStore((state) => state.agreementHtml);
@@ -22,6 +23,16 @@ const MainContainer = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const backgroundColor = useAppStore((state) => state.backgroundColor);
   const textColor = useAppStore((state) => state.textColor);
+  const [logicCode, setLogicCode] = useState(`// Write contract logic here
+    export default class Logic {
+    async trigger(data, request) {
+    return {
+      result: {
+        message: "Hello from logic!"
+        }
+      };
+    }
+  }`);
 
   const handleDownloadPdf = async () => {
     const element = downloadRef.current;
@@ -65,6 +76,7 @@ const MainContainer = () => {
     isModelCollapsed,
     isTemplateCollapsed,
     isDataCollapsed,
+    toggleProblemPanelVisible,
     toggleModelCollapse,
     toggleDataCollapse,
   } = useAppStore((state) => ({
@@ -77,9 +89,17 @@ const MainContainer = () => {
     isDataCollapsed: state.isDataCollapsed,
     toggleModelCollapse: state.toggleModelCollapse,
     toggleDataCollapse: state.toggleDataCollapse,
+    toggleProblemPanelVisible: state.toggleProblemPanelVisible
   }));
 
+  const [isProblem,setProblem] = useState(true);
+
   const [, setLoading] = useState(true);
+
+  const [request, setRequest] = useState(`{
+    "input": 100}`);
+  
+  const [executionResult, setExecutionResult] = useState<any>(null);
 
   // Calculate dynamic panel sizes based on collapse states
   const collapsedCount = [isModelCollapsed, isTemplateCollapsed, isDataCollapsed].filter(Boolean).length;
@@ -89,6 +109,38 @@ const MainContainer = () => {
 
   // Create a key that changes when collapse state changes to force panel re-layout
   const panelKey = `${String(isModelCollapsed)}-${String(isTemplateCollapsed)}-${String(isDataCollapsed)}`;
+
+  const runContract = async () => {
+    let parsedRequest;
+
+    try {
+      parsedRequest = JSON.parse(request);
+    } catch {
+      setExecutionResult({ error: "Invalid JSON in request" });
+      return;
+    }
+    const data = useAppStore((state) => state.data);
+    try {
+      const res = await fetch("http://localhost:3001/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          logic: logicCode,
+          request: parsedRequest,
+          data
+        })
+      });
+
+      const result = await res.json();
+      setExecutionResult(result);
+
+      } catch (err) {
+        console.error("Execution failed:", err);
+      }
+    };
+
 
   return (
     <div className="main-container" style={{ backgroundColor }}>
@@ -149,6 +201,45 @@ const MainContainer = () => {
                   </Panel>
 
                   <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
+                  <Panel minSize={15}>
+                    <div className="main-container-editor-section">
+                      <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
+                        <span>Logic (TypeScript)</span>
+                      </div>
+
+                      <div className="main-container-editor-content" style={{ backgroundColor }}>
+                        {/* <monaco.editor.IStandaloneCodeEditor/> */}
+                        <Editor
+                        height="100%"
+                        defaultLanguage="typescript"
+                        value={logicCode}
+                        onChange={(value) => setLogicCode(value || "")}
+                      />
+                      </div>
+                    </div>
+                  </Panel>
+
+                  <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
+
+
+                  <Panel minSize={10}>
+                    <div className="main-container-editor-section">
+                      <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
+                        <span>Request Input</span>
+                      </div>
+
+                      <div className="main-container-editor-content">
+                        <Editor
+                          height="100%"
+                          defaultLanguage="json"
+                          value={request}
+                          onChange={(value) => setRequest(value || "")}
+                        />
+                      </div>
+                    </div>
+                  </Panel>
+
+                  <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
 
                   <Panel minSize={3} maxSize={isDataCollapsed ? collapsedSize : 100} defaultSize={isDataCollapsed ? collapsedSize : expandedSize}>
                     <div className="main-container-editor-section tour-json-data">
@@ -188,14 +279,39 @@ const MainContainer = () => {
                       )}
                     </div>
                   </Panel>
-                  {isProblemPanelVisible && (
-                    <>
-                      <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
-                      <Panel defaultSize={25} minSize={15}>
-                        <ProblemPanel />
-                      </Panel>
-                    </>
-                  )}
+
+                   <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
+
+                  <Panel minSize={3} maxSize={isDataCollapsed ? collapsedSize : 100} defaultSize={isDataCollapsed ? collapsedSize : expandedSize}>
+                    <div className="main-container-editor-section tour-json-data">
+                      <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
+                        <div className="main-container-editor-header-left">
+                          <button
+                            className="collapse-button"
+                            onClick={toggleProblemPanelVisible}
+                            style={{
+                              color: textColor,
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '4px',
+                              marginRight: '4px'
+                            }}
+                            title={isProblemPanelVisible ? "Expand" : "Collapse"}
+                          >
+                            {isProblemPanelVisible ? <MdExpandMore size={20} /> : <MdChevronRight size={20} />}
+                          </button>
+                          <span>Problems</span>
+                        </div>
+                      </div>
+                      {isProblemPanelVisible &&
+                     (<ProblemPanel /> )
+                    }
+                    </div>
+                  </Panel>
+                  
                 </PanelGroup>
               </div>
             </Panel>
@@ -208,6 +324,11 @@ const MainContainer = () => {
               <div className="main-container-preview-panel tour-preview-panel" style={{ backgroundColor }}>
                 <div className={`main-container-preview-header ${backgroundColor === '#ffffff' ? 'main-container-preview-header-light' : 'main-container-preview-header-dark'}`}>
                   <span>Preview</span>
+                  <Button
+                  onClick={runContract}
+                  style={{ marginLeft: "10px" }}>
+                  Run Contract
+                </Button>
                   <Button
                     onClick={() => void handleDownloadPdf()}
                     loading={isDownloading}
@@ -233,8 +354,26 @@ const MainContainer = () => {
               </div>
             </Panel>
             <PanelResizeHandle className="main-container-panel-resize-handle-horizontal" />
-          </>
+
+
+        {executionResult && (
+          <div style={{ marginTop: "20px" }}>
+          <h3>Execution Output</h3>
+          
+          <pre style={{
+            background: "#111",
+            color: "#0f0",
+            padding: "10px",
+            borderRadius: "6px",
+            overflow: "auto"
+          }}>
+          {JSON.stringify(executionResult, null, 2)}
+          </pre>
+          </div>
         )}
+        </>
+      )}
+
         {isAIChatOpen && (
           <>
             <Panel defaultSize={30} minSize={20}>

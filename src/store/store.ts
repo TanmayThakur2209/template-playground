@@ -53,7 +53,7 @@ interface AppState {
   isProblemPanelVisible: boolean;
   setEditorsVisible: (value: boolean) => void;
   setPreviewVisible: (value: boolean) => void;
-  setProblemPanelVisible: (value: boolean) => void;
+  toggleProblemPanelVisible: () => void;
   startTour: () => void;
   isModelCollapsed: boolean;
   isTemplateCollapsed: boolean;
@@ -183,6 +183,7 @@ const useAppStore = create<AppState>()(
       toggleModelCollapse: () => set((state) => ({ isModelCollapsed: !state.isModelCollapsed })),
       toggleTemplateCollapse: () => set((state) => ({ isTemplateCollapsed: !state.isTemplateCollapsed })),
       toggleDataCollapse: () => set((state) => ({ isDataCollapsed: !state.isDataCollapsed })),
+      toggleProblemPanelVisible: () => set((state) => ({ isProblemPanelVisible: !state.isProblemPanelVisible })),
       setEditorsVisible: (value) => {
         const state = get();
         if (!value && !state.isPreviewVisible) {
@@ -199,10 +200,10 @@ const useAppStore = create<AppState>()(
         set({ isPreviewVisible: value });
         savePanelState({ ...get(), isPreviewVisible: value }); // Save change
       },
-      setProblemPanelVisible: (value) => {
-        set({ isProblemPanelVisible: value });
-        savePanelState({ ...get(), isProblemPanelVisible: value }); // Save change
-      },
+      // setProblemPanelVisible: (value) => {
+      //   set({ isProblemPanelVisible: value });
+      //   savePanelState({ ...get(), isProblemPanelVisible: value }); // Save change
+      // },
       init: async () => {
         const params = new URLSearchParams(window.location.search);
         const compressedData = params.get("data");
