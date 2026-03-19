@@ -9,7 +9,8 @@ import { transform } from "@accordproject/markdown-transform";
 import { SAMPLES, Sample } from "../samples";
 import * as playground from "../samples/playground";
 import { compress, decompress } from "../utils/compression/compression";
-import { AIConfig, ChatState } from '../types/components/AIAssistant.types';
+import { AIConfig, ChatState, KeyProtectionLevel } from '../types/components/AIAssistant.types';
+import { validateBeforeRebuild } from "../utils/validators";
 
 interface AppState {
   templateMarkdown: string;
@@ -61,6 +62,12 @@ interface AppState {
   toggleModelCollapse: () => void;
   toggleTemplateCollapse: () => void;
   toggleDataCollapse: () => void;
+  showLineNumbers: boolean;
+  setShowLineNumbers: (value: boolean) => void;
+  isSettingsOpen: boolean;
+  setSettingsOpen: (value: boolean) => void;
+  keyProtectionLevel: KeyProtectionLevel | null;
+  setKeyProtectionLevel: (level: KeyProtectionLevel | null) => void;
 }
 
 export interface DecompressedData {
@@ -73,6 +80,10 @@ export interface DecompressedData {
 const rebuildDeBounce = debounce(rebuild, 500);
 
 async function rebuild(template: string, model: string, dataString: string): Promise<string> {
+  // Validate inputs before expensive operations
+  // This fails fast on invalid JSON or CTO syntax without running network calls
+  await validateBeforeRebuild(template, model, dataString);
+  
   const modelManager = new ModelManager({ strict: true });
   modelManager.addCTOModel(model, undefined, true);
   await modelManager.updateExternalModels();
@@ -144,6 +155,16 @@ const savePanelState = (state: Partial<AppState>) => {
     };
     localStorage.setItem('ui-panels', JSON.stringify(panels));
   }
+};
+
+const getInitialLineNumbers = () => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('showLineNumbers');
+    if (saved !== null) {
+      return saved === 'true';
+    }
+  }
+  return true; // Default to showing line numbers
 };
 
 const useAppStore = create<AppState>()(
@@ -290,90 +311,91 @@ const useAppStore = create<AppState>()(
         }));
         }
 
-      },
-      setEditorAgreementData: (value: string) => {
-        set(() => ({ editorAgreementData: value }));
-      },
-      generateShareableLink: () => {
-        const state = get();
-        const compressedData = compress({
-          templateMarkdown: state.templateMarkdown,
-          modelCto: state.modelCto,
-          data: state.data,
-          agreementHtml: state.agreementHtml,
-        });
-        return `${window.location.origin}/#data=${compressedData}`;
-      },
-      loadFromLink: async (compressedData: string) => {
-        try {
-          const { templateMarkdown, modelCto, data, agreementHtml } = decompress(compressedData);
-          if (!templateMarkdown || !modelCto || !data) {
-            throw new Error("Invalid share link data");
-          }
-          set(() => ({
-            templateMarkdown,
-            editorValue: templateMarkdown,
-            modelCto,
-            editorModelCto: modelCto,
-            data,
-            editorAgreementData: data,
-            agreementHtml,
-            error: undefined,
-          }));
-          await get().rebuild();
-        } catch (error) {
-          set(() => ({
-            error: "Failed to load shared content: " + (error instanceof Error ? error.message : "Unknown error"),
-            isProblemPanelVisible: true,
-          }));
-        }
-      },
-      toggleDarkMode: () => {
-        set((state) => {
-          const isDark = state.backgroundColor === '#121212';
-          const newTheme = {
-            backgroundColor: isDark ? '#ffffff' : '#121212',
-            textColor: isDark ? '#121212' : '#ffffff',
-          };
-           
-          if (typeof window !== 'undefined') {
-            const themeValue = isDark ? 'light' : 'dark';
-            localStorage.setItem('theme', themeValue);
-            try {
-              document.documentElement.setAttribute('data-theme', themeValue);
-            } catch (e) {
-              // ignore
+        },
+        setEditorAgreementData: (value: string) => {
+          set(() => ({ editorAgreementData: value }));
+        },
+        generateShareableLink: () => {
+          const state = get();
+          const compressedData = compress({
+            templateMarkdown: state.templateMarkdown,
+            modelCto: state.modelCto,
+            data: state.data,
+            agreementHtml: state.agreementHtml,
+          });
+          return `${window.location.origin}/#data=${compressedData}`;
+        },
+        loadFromLink: async (compressedData: string) => {
+          try {
+            const { templateMarkdown, modelCto, data, agreementHtml } = decompress(compressedData);
+            if (!templateMarkdown || !modelCto || !data) {
+              throw new Error("Invalid share link data");
             }
+            set(() => ({
+              templateMarkdown,
+              editorValue: templateMarkdown,
+              modelCto,
+              editorModelCto: modelCto,
+              data,
+              editorAgreementData: data,
+              agreementHtml,
+              error: undefined,
+            }));
+            await get().rebuild();
+          } catch (error) {
+            set(() => ({
+              error: "Failed to load shared content: " + (error instanceof Error ? error.message : "Unknown error"),
+              isProblemPanelVisible: true,
+            }));
           }
-           
-          return newTheme;
-        });
-      },
-      setAIConfigOpen: (isOpen: boolean) => set(() => ({ isAIConfigOpen: isOpen })),
-      setAIChatOpen: (isOpen: boolean) => {
-        set(() => ({ isAIChatOpen: isOpen }));
-        savePanelState({ ...get(), isAIChatOpen: isOpen }); // Save change
-      },
-      setChatState: (state) => set({ chatState: state }),
-      updateChatState: (partial) => set((state) => ({ 
-        chatState: { ...state.chatState, ...partial } 
-      })),
-      setAIConfig: (config) => set({ aiConfig: config }),
-      setChatAbortController: (controller) => set({ chatAbortController: controller }),
-      resetChat: () => {
-        const { chatAbortController } = get();
-        if (chatAbortController) {
-          chatAbortController.abort();
-        }
-        get().setChatState({
-          messages: [],
-          isLoading: false,
-          error: null,
-        });
-      },
-      startTour: () => {
-        console.log('Starting tour...');
-      },
+        },
+        toggleDarkMode: () => {
+          set((state) => {
+            const isDark = state.backgroundColor === '#121212';
+            const newTheme = {
+              backgroundColor: isDark ? '#ffffff' : '#121212',
+              textColor: isDark ? '#121212' : '#ffffff',
+            };
+
+            if (typeof window !== 'undefined') {
+              const themeValue = isDark ? 'light' : 'dark';
+              localStorage.setItem('theme', themeValue);
+              try {
+                document.documentElement.setAttribute('data-theme', themeValue);
+              } catch (e) {
+                // ignore
+              }
+            }
+
+            return newTheme;
+          });
+        },
+        setAIConfigOpen: (isOpen: boolean) => set(() => ({ isAIConfigOpen: isOpen })),
+        setAIChatOpen: (isOpen: boolean) => {
+          set(() => ({ isAIChatOpen: isOpen }));
+          savePanelState({ ...get(), isAIChatOpen: isOpen }); // Save change
+        },
+        setChatState: (state) => set({ chatState: state }),
+        updateChatState: (partial) => set((state) => ({
+          chatState: { ...state.chatState, ...partial }
+        })),
+        setAIConfig: (config) => set({ aiConfig: config }),
+        setChatAbortController: (controller) => set({ chatAbortController: controller }),
+        setKeyProtectionLevel: (level) => set({ keyProtectionLevel: level }),
+        resetChat: () => {
+          const { chatAbortController } = get();
+          if (chatAbortController) {
+            chatAbortController.abort();
+          }
+          get().setChatState({
+            messages: [],
+            isLoading: false,
+            error: null,
+          });
+        },
+        startTour: () => {
+          console.log('Starting tour...');
+        },
       }
     })
   )
