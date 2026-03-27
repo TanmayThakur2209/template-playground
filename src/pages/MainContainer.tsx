@@ -16,6 +16,47 @@ import * as monaco from "monaco-editor";
 import { MdFormatAlignLeft, MdChevronRight, MdExpandMore, MdClose  } from "react-icons/md";
 import DOMPurify from "dompurify";
 import Editor from "@monaco-editor/react";
+import * as ts from "typescript";
+
+function compileTS(code: string): string {
+  let cleaned = code;
+  cleaned = cleaned.replace(/export\s+default\s+/g, "");
+  cleaned = cleaned.replace(/class\s+Logic/, "globalThis.Logic = class Logic");
+
+  const result = ts.transpileModule(cleaned, {
+    compilerOptions: {
+      module: ts.ModuleKind.None,
+      target: ts.ScriptTarget.ES2017,
+    },
+  });
+
+  return result.outputText;
+}
+
+async function executeJS(jsCode: string, data: any, request: any) {
+  try {
+    const func = new Function(
+      "data",
+      "request",
+      `
+      "use strict";
+
+      ${jsCode}
+
+      if (!globalThis.Logic) {
+        throw new Error("Logic class not found");
+      }
+
+      const logic = new globalThis.Logic();
+      return logic.trigger(data, request);
+      `
+    );
+
+    return await func(data, request);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
 
 const MainContainer = () => {
   const agreementHtml = useAppStore((state) => state.agreementHtml);
@@ -24,6 +65,7 @@ const MainContainer = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const backgroundColor = useAppStore((state) => state.backgroundColor);
   const textColor = useAppStore((state) => state.textColor);
+  const [executionMode, setExecutionMode] = useState<"browser" | "server">("browser");
 
   const handleDownloadPdf = async () => {
     const element = downloadRef.current;
@@ -86,20 +128,45 @@ const MainContainer = () => {
   }));
 
   const [, setLoading] = useState(true);
-  const [request, setRequest] = useState(`{
-    "input": 100}`);
+  const [request, setRequest] = useState(`
+    {
+      "action": "calculateTotal"
+    }
+    `);
 
   const [executionResult, setExecutionResult] = useState<any>(null);
-  const [logicCode, setLogicCode] = useState(`// Write contract logic here
-  export default class Logic {
-  async trigger(data, request) {
-  return {
-    result: {
-      message: "Hello from logic!"
+  const [logicCode, setLogicCode] = useState(`
+    export default class Logic {
+      async trigger(data, request) {
+        const services = data.compensation.services;
+
+        let total = 0;
+
+        for (const service of services) {
+          total += service.rate * service.quantity;
+        }
+
+        let discount = 0;
+
+        if (total > 3000) {
+          discount = total * 0.1;
+        }
+
+        const finalAmount = total - discount;
+
+        return {
+          result: {
+            client: data.clientName,
+            provider: data.providerName,
+            total,
+            discount,
+            finalAmount,
+            message: discount > 0 ? "Bulk discount applied" : "No discount"
+          }
+        };
       }
-    };
-  }
-}`);
+    }
+    `);
 
   // Calculate dynamic panel sizes based on collapse states
   const collapsedCount = [isModelCollapsed, isTemplateCollapsed, isDataCollapsed].filter(Boolean).length;
@@ -123,63 +190,38 @@ const MainContainer = () => {
   const template = useAppStore((state) => state.template);
     
   const runContract = async () => {
-  console.log("RUN CLICKED");
+    console.log("RUN CLICKED (BROWSER MODE)");
 
-  let parsedRequest;
+    let parsedRequest;
+    let parsedData;
 
-  try {
-    parsedRequest = JSON.parse(request);
-  } catch (err) {
-    console.error("JSON ERROR:", err);
-    setExecutionResult({ error: "Invalid JSON in request" });
-    return;
-  }
-
-  let parsedData;
-
-  try {
-    parsedData = typeof data === "string" ? JSON.parse(data) : data;
-  } catch (err) {
-    console.error("DATA JSON ERROR:", err);
-    setExecutionResult({ error: "Invalid JSON in data" });
-    return;
-  }
-
-  try {
-    console.log("Sending request...");
-
-    const res = await fetch("http://localhost:3001/execute", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        template,
-        logic: logicCode,
-        data: parsedData,
-        request: parsedRequest,
-      }),
-    });
-
-    console.log("Response status:", res.status);
-
-    const result = await res.json();
-    console.log("RESULT:", result);
-
-    if (!res.ok) {
-      throw new Error(result.error || "Execution failed");
+    try {
+      parsedRequest = JSON.parse(request);
+    } catch {
+      setExecutionResult({ error: "Invalid JSON in request" });
+      return;
     }
 
-    setExecutionResult(result);
+    try {
+      parsedData = typeof data === "string" ? JSON.parse(data) : data;
+    } catch {
+      setExecutionResult({ error: "Invalid JSON in data" });
+      return;
+    }
 
-  } catch (err: any) {
-    console.error("FULL ERROR:", err);
-    setExecutionResult({
-      error: err.message || "Execution failed",
-    });
-  }
-};
+    try {
+      const jsCode = compileTS(logicCode);
+      console.log("Compiled JS:", jsCode);
+      const result = await executeJS(jsCode, parsedData, parsedRequest);
+
+      setExecutionResult(result);
+
+    } catch (err: any) {
+      setExecutionResult({
+        error: err.message || "Execution failed",
+      });
+    }
+  };
 
     const requestEditorRef = useRef<any>(null);
 
