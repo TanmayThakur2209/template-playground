@@ -6,14 +6,57 @@ import useAppStore from "../store/store";
 import { AIChatPanel } from "../components/AIChatPanel";
 import ProblemPanel from "../components/ProblemPanel";
 import SampleDropdown from "../components/SampleDropdown";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { TemplateMarkdownToolbar } from "../components/TemplateMarkdownToolbar";
 import { MarkdownEditorProvider } from "../contexts/MarkdownEditorContext";
 import "../styles/pages/MainContainer.css";
 import html2pdf from "html2pdf.js";
 import { Button, message } from "antd";
 import * as monaco from "monaco-editor";
-import { MdFormatAlignLeft, MdChevronRight, MdExpandMore } from "react-icons/md";
+import { MdFormatAlignLeft, MdChevronRight, MdExpandMore, MdClose  } from "react-icons/md";
+import DOMPurify from "dompurify";
+import Editor from "@monaco-editor/react";
+import * as ts from "typescript";
+
+function compileTS(code: string): string {
+  let cleaned = code;
+  cleaned = cleaned.replace(/export\s+default\s+/g, "");
+  cleaned = cleaned.replace(/class\s+Logic/, "globalThis.Logic = class Logic");
+
+  const result = ts.transpileModule(cleaned, {
+    compilerOptions: {
+      module: ts.ModuleKind.None,
+      target: ts.ScriptTarget.ES2017,
+    },
+  });
+
+  return result.outputText;
+}
+
+async function executeJS(jsCode: string, data: any, request: any) {
+  try {
+    const func = new Function(
+      "data",
+      "request",
+      `
+      "use strict";
+
+      ${jsCode}
+
+      if (!globalThis.Logic) {
+        throw new Error("Logic class not found");
+      }
+
+      const logic = new globalThis.Logic();
+      return logic.trigger(data, request);
+      `
+    );
+
+    return await func(data, request);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
 
 const MainContainer = () => {
   const agreementHtml = useAppStore((state) => state.agreementHtml);
@@ -22,16 +65,7 @@ const MainContainer = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const backgroundColor = useAppStore((state) => state.backgroundColor);
   const textColor = useAppStore((state) => state.textColor);
-  const [logicCode, setLogicCode] = useState(`// Write contract logic here
-    export default class Logic {
-    async trigger(data, request) {
-    return {
-      result: {
-        message: "Hello from logic!"
-        }
-      };
-    }
-  }`);
+  const [executionMode, setExecutionMode] = useState<"browser" | "server">("browser");
 
   const handleDownloadPdf = async () => {
     const element = downloadRef.current;
@@ -75,7 +109,8 @@ const MainContainer = () => {
     isModelCollapsed,
     isTemplateCollapsed,
     isDataCollapsed,
-    toggleProblemPanelVisible,
+    toggleTemplateCollapse,
+    toggleProblemPanel,
     toggleModelCollapse,
     toggleDataCollapse,
   } = useAppStore((state) => ({
@@ -88,17 +123,50 @@ const MainContainer = () => {
     isDataCollapsed: state.isDataCollapsed,
     toggleModelCollapse: state.toggleModelCollapse,
     toggleDataCollapse: state.toggleDataCollapse,
-    toggleProblemPanelVisible: state.toggleProblemPanelVisible
+    toggleTemplateCollapse: state.toggleTemplateCollapse,
+    toggleProblemPanel: state.toggleProblemPanel,
   }));
 
-  const [isProblem,setProblem] = useState(true);
-
   const [, setLoading] = useState(true);
+  const [request, setRequest] = useState(`
+    {
+      "action": "calculateTotal"
+    }
+    `);
 
-  const [request, setRequest] = useState(`{
-    "input": 100}`);
-  
   const [executionResult, setExecutionResult] = useState<any>(null);
+  const [logicCode, setLogicCode] = useState(`
+    export default class Logic {
+      async trigger(data, request) {
+        const services = data.compensation.services;
+
+        let total = 0;
+
+        for (const service of services) {
+          total += service.rate * service.quantity;
+        }
+
+        let discount = 0;
+
+        if (total > 3000) {
+          discount = total * 0.1;
+        }
+
+        const finalAmount = total - discount;
+
+        return {
+          result: {
+            client: data.clientName,
+            provider: data.providerName,
+            total,
+            discount,
+            finalAmount,
+            message: discount > 0 ? "Bulk discount applied" : "No discount"
+          }
+        };
+      }
+    }
+    `);
 
   // Calculate dynamic panel sizes based on collapse states
   const collapsedCount = [isModelCollapsed, isTemplateCollapsed, isDataCollapsed].filter(Boolean).length;
@@ -117,9 +185,15 @@ const MainContainer = () => {
   
   // Create a key that changes when collapse state changes to force panel re-layout
   const panelKey = `${String(isModelCollapsed)}-${String(isTemplateCollapsed)}-${String(isDataCollapsed)}`;
-
+  const data = useAppStore((state) => state.data);
+  const model = useAppStore((state) => state.model);
+  const template = useAppStore((state) => state.template);
+    
   const runContract = async () => {
+    console.log("RUN CLICKED (BROWSER MODE)");
+
     let parsedRequest;
+    let parsedData;
 
     try {
       parsedRequest = JSON.parse(request);
@@ -127,28 +201,40 @@ const MainContainer = () => {
       setExecutionResult({ error: "Invalid JSON in request" });
       return;
     }
-    const data = useAppStore((state) => state.data);
-    try {
-      const res = await fetch("http://localhost:3001/execute", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          logic: logicCode,
-          request: parsedRequest,
-          data
-        })
-      });
 
-      const result = await res.json();
+    try {
+      parsedData = typeof data === "string" ? JSON.parse(data) : data;
+    } catch {
+      setExecutionResult({ error: "Invalid JSON in data" });
+      return;
+    }
+
+    try {
+      const jsCode = compileTS(logicCode);
+      console.log("Compiled JS:", jsCode);
+      const result = await executeJS(jsCode, parsedData, parsedRequest);
+
       setExecutionResult(result);
 
-      } catch (err) {
-        console.error("Execution failed:", err);
-      }
-    };
+    } catch (err: any) {
+      setExecutionResult({
+        error: err.message || "Execution failed",
+      });
+    }
+  };
 
+    const requestEditorRef = useRef<any>(null);
+
+    <Editor
+      onMount={(editor) => {
+        requestEditorRef.current = editor;
+      }}
+    />
+    useEffect(() => {
+      setTimeout(() => {
+        requestEditorRef.current?.layout();
+      }, 100);
+    }, [isDataCollapsed, isModelCollapsed, isTemplateCollapsed]);
 
   return (
     <div className="main-container" style={{ backgroundColor }}>
@@ -198,6 +284,7 @@ const MainContainer = () => {
                     <MarkdownEditorProvider>
                       <div className="main-container-editor-section tour-template-mark">
                         <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
+                          
                           <span>TemplateMark</span>
                           <TemplateMarkdownToolbar />
                         </div>
@@ -209,6 +296,7 @@ const MainContainer = () => {
                   </Panel>
 
                   <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
+
                   <Panel minSize={15}>
                     <div className="main-container-editor-section">
                       <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
@@ -216,7 +304,6 @@ const MainContainer = () => {
                       </div>
 
                       <div className="main-container-editor-content" style={{ backgroundColor }}>
-                        {/* <monaco.editor.IStandaloneCodeEditor/> */}
                         <Editor
                         height="100%"
                         defaultLanguage="typescript"
@@ -229,8 +316,7 @@ const MainContainer = () => {
 
                   <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
 
-
-                  <Panel minSize={10}>
+                   <Panel minSize={10}>
                     <div className="main-container-editor-section">
                       <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
                         <span>Request Input</span>
@@ -241,6 +327,9 @@ const MainContainer = () => {
                           height="100%"
                           defaultLanguage="json"
                           value={request}
+                          onMount={(editor) => {
+                            requestEditorRef.current = editor;
+                          }}
                           onChange={(value) => setRequest(value || "")}
                         />
                       </div>
@@ -248,6 +337,7 @@ const MainContainer = () => {
                   </Panel>
 
                   <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
+
 
                   <Panel minSize={3} maxSize={isDataCollapsed ? collapsedSize : 100} defaultSize={isDataCollapsed ? collapsedSize : expandedSize}>
                     <div className="main-container-editor-section tour-json-data">
@@ -288,16 +378,16 @@ const MainContainer = () => {
                       )}
                     </div>
                   </Panel>
-
-                   <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
-
-                  <Panel minSize={3} maxSize={isDataCollapsed ? collapsedSize : 100} defaultSize={isDataCollapsed ? collapsedSize : expandedSize}>
+               
+                      <PanelResizeHandle className="main-container-panel-resize-handle-vertical" />
+                      {isProblemPanelVisible &&
+                       <Panel minSize={3} maxSize={isDataCollapsed ? collapsedSize : 100} defaultSize={isDataCollapsed ? collapsedSize : expandedSize}>
                     <div className="main-container-editor-section tour-json-data">
                       <div className={`main-container-editor-header ${backgroundColor === '#ffffff' ? 'main-container-editor-header-light' : 'main-container-editor-header-dark'}`}>
                         <div className="main-container-editor-header-left">
                           <button
                             className="collapse-button"
-                            onClick={toggleProblemPanelVisible}
+                            onClick={toggleProblemPanel}
                             style={{
                               color: textColor,
                               background: 'transparent',
@@ -310,7 +400,7 @@ const MainContainer = () => {
                             }}
                             title={isProblemPanelVisible ? "Expand" : "Collapse"}
                           >
-                            {isProblemPanelVisible ? <MdExpandMore size={20} /> : <MdChevronRight size={20} />}
+                            <MdClose size={20} /> 
                           </button>
                           <span>Problems</span>
                         </div>
@@ -320,7 +410,7 @@ const MainContainer = () => {
                     }
                     </div>
                   </Panel>
-                  
+}
                 </PanelGroup>
               </div>
             </Panel>
@@ -329,7 +419,7 @@ const MainContainer = () => {
         )}
         {isPreviewVisible && (
           <>
-            <Panel defaultSize={37.5} minSize={20}>
+            <Panel className="h-full" defaultSize={37.5} minSize={40}>
               <div className="main-container-preview-panel tour-preview-panel" style={{ backgroundColor: previewBackgroundColor }}>
                 <div className={`main-container-preview-header ${backgroundColor === '#ffffff' ? 'main-container-preview-header-light' : 'main-container-preview-header-dark'}`} style={{ backgroundColor: previewHeaderColor }}>
                   <span>Preview</span>
@@ -360,29 +450,27 @@ const MainContainer = () => {
                     />
                   </div>
                 </div>
+
+           {executionResult && (
+            <div className="mt-4 bg-black text-blue-200 rounded-lg shadow-lg border border-gray-700 flex flex-col max-h-60">
+              
+              <div className="px-4 bg-[#40475c]">
+                  <h3 className="text-sm font-semibold">Execution Output</h3>
               </div>
-            </Panel>
-            <PanelResizeHandle className="main-container-panel-resize-handle-horizontal" />
 
+              <div className="p-4 overflow-y-auto text-sm">
+                <pre className="whitespace-pre-wrap break-words">
+                  {JSON.stringify(executionResult, null, 2)}
+                </pre>
+              </div>
 
-        {executionResult && (
-          <div style={{ marginTop: "20px" }}>
-          <h3>Execution Output</h3>
-          
-          <pre style={{
-            background: "#111",
-            color: "#0f0",
-            padding: "10px",
-            borderRadius: "6px",
-            overflow: "auto"
-          }}>
-          {JSON.stringify(executionResult, null, 2)}
-          </pre>
-          </div>
-        )}
+            </div>
+          )}
+        
+        </div>
+      </Panel>
         </>
       )}
-
         {isAIChatOpen && (
           <>
             <Panel defaultSize={30} minSize={20}>
