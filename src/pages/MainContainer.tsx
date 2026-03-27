@@ -65,7 +65,6 @@ const MainContainer = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const backgroundColor = useAppStore((state) => state.backgroundColor);
   const textColor = useAppStore((state) => state.textColor);
-  const [executionMode, setExecutionMode] = useState<"browser" | "server">("browser");
 
   const handleDownloadPdf = async () => {
     const element = downloadRef.current;
@@ -109,7 +108,7 @@ const MainContainer = () => {
     isModelCollapsed,
     isTemplateCollapsed,
     isDataCollapsed,
-    toggleTemplateCollapse,
+    // toggleTemplateCollapse,
     toggleProblemPanel,
     toggleModelCollapse,
     toggleDataCollapse,
@@ -186,8 +185,8 @@ const MainContainer = () => {
   // Create a key that changes when collapse state changes to force panel re-layout
   const panelKey = `${String(isModelCollapsed)}-${String(isTemplateCollapsed)}-${String(isDataCollapsed)}`;
   const data = useAppStore((state) => state.data);
-  const model = useAppStore((state) => state.model);
-  const template = useAppStore((state) => state.template);
+  // const model = useAppStore((state) => state.model);
+  // const template = useAppStore((state) => state.template);
     
   const runContract = async () => {
     console.log("RUN CLICKED (BROWSER MODE)");
