@@ -418,7 +418,7 @@ const MainContainer = () => {
         )}
         {isPreviewVisible && (
           <>
-            <Panel className="h-full" defaultSize={37.5} minSize={40}>
+            <Panel className="h-full" defaultSize={35} minSize={20}>
               <div className="main-container-preview-panel tour-preview-panel" style={{ backgroundColor: previewBackgroundColor }}>
                 <div className={`main-container-preview-header ${backgroundColor === '#ffffff' ? 'main-container-preview-header-light' : 'main-container-preview-header-dark'}`} style={{ backgroundColor: previewHeaderColor }}>
                   <span>Preview</span>
