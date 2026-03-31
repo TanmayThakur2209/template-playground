@@ -161,7 +161,17 @@ const MainContainer = () => {
             discount,
             finalAmount,
             message: discount > 0 ? "Bulk discount applied" : "No discount"
-          }
+          },
+          state: {
+            ...data,
+            status: "CALCULATED"
+          },
+          events: [
+            {
+              type: "CalculationDone",
+              finalAmount
+            }
+          ]
         };
       }
     }
