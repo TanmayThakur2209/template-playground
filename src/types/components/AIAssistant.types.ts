@@ -25,12 +25,6 @@ export interface AIConfig {
   enableInlineSuggestions?: boolean;
 }
 
-export interface AIConfigPopupProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: () => void;
-}
-
 export interface editorsContent {
   editorTemplateMark: string,
   editorModelCto: string,
@@ -43,3 +37,12 @@ export interface CodeSelectionMenuProps {
   onClose: () => void;
   editorType: 'markdown' | 'concerto' | 'json';
 }
+
+export interface EncryptedKeyData {
+  credentialId: string;
+  ciphertext: string;
+  iv: string;
+  salt: string;
+}
+
+export type KeyProtectionLevel = 'webauthn' | 'memory-only' | 'legacy-plaintext';

@@ -1,8 +1,10 @@
-import { lazy, Suspense, useMemo, useCallback } from "react";
+import { lazy, Suspense, useMemo, useCallback, useEffect } from "react";
 import * as monaco from "monaco-editor";
 import useAppStore from "../store/store";
+import useThemeName from "../hooks/useThemeName";
 import { useCodeSelection } from "../components/CodeSelectionMenu";
 import { registerAutocompletion } from "../ai-assistant/autocompletion";
+import { registerEditor, unregisterEditor } from "../utils/editorNavigation";
 
 const MonacoEditor = lazy(() =>
   import("@monaco-editor/react").then((mod) => ({ default: mod.Editor }))
@@ -18,22 +20,20 @@ export default function JSONEditor({
   editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
 }) {
   const { handleSelection, MenuComponent } = useCodeSelection("json");
-  
-  const { backgroundColor, aiConfig } = useAppStore((state) => ({
-    backgroundColor: state.backgroundColor,
+
+  const { aiConfig, showLineNumbers } = useAppStore((state) => ({
     aiConfig: state.aiConfig,
+    showLineNumbers: state.showLineNumbers,
   }));
 
-  const themeName = useMemo(
-    () => (backgroundColor ? "darkTheme" : "lightTheme"),
-    [backgroundColor]
-  );
+  const themeName = useThemeName();
 
   const options: monaco.editor.IStandaloneEditorConstructionOptions = useMemo(() => ({
     minimap: { enabled: false },
     wordWrap: "on",
     automaticLayout: true,
     scrollBeyondLastLine: false,
+    lineNumbers: showLineNumbers ? 'on' : 'off',
     inlineSuggest: {
       enabled: aiConfig?.enableInlineSuggestions !== false,
       mode: "prefix",
@@ -50,7 +50,7 @@ export default function JSONEditor({
     acceptSuggestionOnCommitCharacter: false,
     acceptSuggestionOnEnter: "off",
     tabCompletion: "off",
-  }), [aiConfig?.enableInlineSuggestions]);
+  }), [aiConfig?.enableInlineSuggestions, showLineNumbers]);
 
 
   const handleEditorWillMount = (monacoInstance: typeof monaco) => {
@@ -63,10 +63,17 @@ export default function JSONEditor({
     if (editorRef) {
       editorRef.current = editor;
     }
+    registerEditor('json', editor);
     editor.onDidChangeCursorSelection(() => {
       handleSelection(editor);
     });
   };
+
+  useEffect(() => {
+    return () => {
+      unregisterEditor('json');
+    };
+  }, []);
 
   const handleChange = useCallback(
     (val: string | undefined) => {

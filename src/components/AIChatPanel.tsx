@@ -15,12 +15,12 @@ export const AIChatPanel = () => {
     editorAgreementData: state.editorAgreementData,
   }));
   
-  const { chatState, resetChat, aiConfig, setAIConfig, setAIConfigOpen, setAIChatOpen, textColor, backgroundColor } = useAppStore((state) => ({
+  const { chatState, resetChat, aiConfig, setAIConfig, setSettingsOpen, setAIChatOpen, textColor, backgroundColor } = useAppStore((state) => ({
     chatState: state.chatState,
     resetChat: state.resetChat,
     aiConfig: state.aiConfig,
     setAIConfig: state.setAIConfig,
-    setAIConfigOpen: state.setAIConfigOpen,
+    setSettingsOpen: state.setSettingsOpen,
     setAIChatOpen: state.setAIChatOpen,
     textColor: state.textColor,
     backgroundColor: state.backgroundColor
@@ -86,7 +86,7 @@ export const AIChatPanel = () => {
     if (!userInput.trim()) return;
     
     if (!aiConfig) {
-      setAIConfigOpen(true);
+      setSettingsOpen(true);
       return;
     }
     
@@ -241,9 +241,10 @@ export const AIChatPanel = () => {
         <h2 className="text-lg font-bold" style={{ color: textColor }}>AI Assistant</h2>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setAIConfigOpen(true)}
-            className="text-gray-500 hover:text-gray-800"
+            onClick={() => setSettingsOpen(true)}
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="AI Settings"
+            aria-label="AI Settings"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -267,8 +268,9 @@ export const AIChatPanel = () => {
           </button>
           <button
             onClick={resetChat}
-            className="text-gray-500 hover:text-gray-800"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Reset Chat"
+            aria-label="Reset Chat"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -287,8 +289,9 @@ export const AIChatPanel = () => {
           </button>
           <button
             onClick={() => setAIChatOpen(false)}
-            className="text-gray-500 hover:text-gray-800"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Close"
+            aria-label="Close Chat"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -372,6 +375,7 @@ export const AIChatPanel = () => {
                 <button
                 onClick={() => setPromptPreset(null)}
                 className="text-indigo-200 hover:text-white transition-colors"
+                aria-label="Clear preset"
                 >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -414,6 +418,7 @@ export const AIChatPanel = () => {
                     className={`ml-1 focus:outline-none ${theme.contextButtons.templateMark.cross}`}
                     tabIndex={-1}
                     type="button"
+                    aria-label="Remove TemplateMark context"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -448,6 +453,7 @@ export const AIChatPanel = () => {
                     className={`ml-1 focus:outline-none ${theme.contextButtons.concerto.cross}`}
                     tabIndex={-1}
                     type="button"
+                    aria-label="Remove Concerto context"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -482,6 +488,7 @@ export const AIChatPanel = () => {
                     className={`ml-1 focus:outline-none ${theme.contextButtons.data.cross}`}
                     tabIndex={-1}
                     type="button"
+                    aria-label="Remove Data context"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -526,6 +533,7 @@ export const AIChatPanel = () => {
                   }`}
                   title="Select Prompt Mode"
                   disabled={chatState.isLoading}
+                  aria-label="Select Prompt Mode"
               >
                   <svg
                       xmlns="http://www.w3.org/2000/svg"

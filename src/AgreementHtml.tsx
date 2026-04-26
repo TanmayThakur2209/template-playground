@@ -1,8 +1,9 @@
-
+import { colors } from './utils/theme';
 import { LoadingOutlined } from "@ant-design/icons";
 import { Spin } from "antd";
 import useAppStore from "./store/store";
 import FullScreenModal from "./components/FullScreenModal";
+import DOMPurify from "dompurify";
 
 function AgreementHtml({ loading, isModal }: { loading: boolean; isModal?: boolean }) {
   const agreementHtml = useAppStore((state) => state.agreementHtml);
@@ -40,12 +41,12 @@ function AgreementHtml({ loading, isModal }: { loading: boolean; isModal?: boole
       </p>
       {loading ? (
         <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
-          <Spin indicator={<LoadingOutlined style={{ fontSize: 42, color: "#19c6c7" }} spin />} />
+          <Spin indicator={<LoadingOutlined style={{ fontSize: 42, color: colors.primary }} spin />} />
         </div>
       ) : (
         <div
           className="agreement"
-          dangerouslySetInnerHTML={{ __html: agreementHtml }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(agreementHtml) }}
           style={{ flex: 1, color: textColor, backgroundColor: backgroundColor }}
         />
       )}
